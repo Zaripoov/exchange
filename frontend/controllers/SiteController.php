@@ -2,9 +2,11 @@
 namespace frontend\controllers;
 
 use frontend\models\ResendVerificationEmailForm;
+use frontend\models\TransferForm;
 use frontend\models\VerifyEmailForm;
 use Yii;
 use yii\base\InvalidArgumentException;
+use yii\httpclient\Client;
 use yii\web\BadRequestHttpException;
 use yii\web\Controller;
 use yii\filters\VerbFilter;
@@ -74,7 +76,37 @@ class SiteController extends Controller
      */
     public function actionIndex()
     {
-        return $this->render('index');
+        $client = new \GuzzleHttp\Client(['base_url' => 'http://exchange.local']);
+
+        if(!Yii::$app->user->isGuest){
+            $responses = $client
+                ->request('GET', 'http://exchange.local/v1/user/view?id='. Yii::$app->user->identity->id.'')
+                ->getBody();
+            $responses = json_decode($responses, true);
+        }else{
+            $responses = null;
+        }
+
+
+        $message = null;
+        $transfer = new TransferForm();
+        if($transfer->load(Yii::$app->request->post())){
+            $request = new \GuzzleHttp\Psr7\Request('GET', 'http://exchange.local/v1/user/transfer?to_user_id='. $responses['id'] .'&whom_user_id='. $transfer['user'] .'&sum='. $transfer['sum']);
+            //$request = $client->request('GET', 'http://exchange.local/v1/user/transfer?to_user_id='. $responses['id'] .'&whom_user_id='. $transfer['user'] .'&sum='. $transfer['sum']);
+            $promise = $client->sendAsync($request)->then(function ($response) {
+                $message = json_decode($response->getBody(), true);
+                Yii::$app->session->setFlash('success', $message['message']);
+            });
+            $promise->wait();
+            return $this->refresh();
+
+        }
+
+        return $this->render('index',[
+            'responses' => $responses,
+            'transfer' => $transfer,
+            'message' => $message,
+        ]);
     }
 
     /**

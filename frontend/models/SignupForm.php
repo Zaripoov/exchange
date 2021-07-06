@@ -1,6 +1,7 @@
 <?php
 namespace frontend\models;
 
+use common\models\Balance;
 use Yii;
 use yii\base\Model;
 use common\models\User;
@@ -10,6 +11,8 @@ use common\models\User;
  */
 class SignupForm extends Model
 {
+    const BALANCE = 0;
+
     public $username;
     public $email;
     public $password;
@@ -54,7 +57,15 @@ class SignupForm extends Model
         $user->setPassword($this->password);
         $user->generateAuthKey();
         $user->generateEmailVerificationToken();
-        return $user->save() && $this->sendEmail($user);
+        if($user->save()){
+            $balance = new Balance();
+            $balance->balance = self::BALANCE;
+            $balance->user_id = $user->id;
+            if($balance->save()){
+                return $this->sendEmail($user);
+            }
+        }
+
 
     }
 
